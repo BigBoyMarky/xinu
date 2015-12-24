@@ -1,0 +1,75 @@
+	// Moving the welcome message to nulluser() function
+	/*kprintf("\nHello World!\n");
+	kprintf("\nI'm the first XINU app and running function main() in system/main.c.\n");
+	kprintf("\nI was created by nulluser() in system/initialize.c using create().\n");
+	kprintf("\nMy creator will turn itself into the do-nothing null process.\n");
+	kprintf("\nI will create a second XINU app that runs shell() in shell/shell.c as an example.\n");
+	kprintf("\nYou can do something else, or do nothing; it's completely up to you.\n");
+	kprintf("\n...creating a shell\n");*/
+
+
+
+
+	/*	kprintf("Problem 3.1\n");
+
+	// testing the functionality of host2netl given the hex of host2netltest
+	long host2netltest = 0x10204910;
+	kprintf("host2netltest: %x\n\n", host2netl(host2netltest));
+
+	kprintf("Problem 3.2\n");
+	printsegaddress();
+
+	kprintf("\nProblem 3.3");
+	kprintf("\nStack Depth in main: %d\n\n", stackdepth());
+	//stacktrace(currpid);
+
+	kprintf("Problem 4\n");*/
+/*	resume(create(printloop, 1024, 20, "printloopA", 1, 'A'));
+	resume(create(printloop, 1024, 20, "printloopB", 1, 'B'));
+	resume(create(printloop, 1024, 50, "printloopC", 1, 'C'));
+	resume(create(printloop, 1024, 50, "printloopD", 1, 'D'));
+	sleepms(4000);
+
+	struct procent *procA = &proctab[*/
+	// this is the results of problem 4.3
+	/*int printloopA = create(printloop, 1024, 20, "printloopA", 1, 'A');
+	int printloopB = create(printloop, 1024, 20, "printloopB", 1, 'B');
+	int printloopC = create(printloop, 1024, 50, "printloopC", 1, 'C');
+	int printloopD = create(printloop, 1024, 50, "printloopD", 1, 'D');
+
+	kprintf("P");
+	resume(printloopA);
+	kprintf("P");
+	resume(printloopB);
+	kprintf("P");
+	resume(printloopC);
+	kprintf("P");
+	resume(printloopD);
+
+	sleepms(4000);
+
+	struct procent *procA = &proctab[printloopA];
+	struct procent *procB = &proctab[printloopB];
+	struct procent *procC = &proctab[printloopC];
+	struct procent *procD = &proctab[printloopD];
+
+	kprintf("\nCPU time for A: %d\nCPU time for B: %d\nCPU time for C: %d\nCPU time for D: %d\n", procA->prcpuused, procB->prcpuused, procC->prcpuused, procD->prcpuused);*/
+
+//	kprintf("\n\nProblem 5\n");
+	// this is the results of problem 5 creates the 4 processes and also calls stackdepth() after
+/*	int printnoloopA = create(printnoloop, 1024, 20, "printnoloopA", 1, 'A');
+	int printnoloopB = create(printnoloop, 1024, 20, "printnoloopB", 1, 'B');
+	int printnoloopC = create(printnoloop, 1024, 20, "printnoloopC", 1, 'C');
+	int printnoloopD = create(printnoloop, 1024, 20, "printnoloopD", 1, 'D');
+
+	resume(printnoloopA);//kprintf("\n\n\n\n\n\n");
+	//stacktrace(currpid);
+	resume(printnoloopB);
+	resume(printnoloopC);
+	resume(printnoloopD);
+
+	kprintf("\nStack Depth in main after 4 processes: %d\n\n", stackdepth());
+
+	//printsegaddress();
+
+	sleepms(10000);*/

@@ -1,0 +1,351 @@
+CS 354 - Fall 2015
+
+Lab 5: Signal Handling Subsystem and Memory Garbage Collection (320 pts)
+
+  Due: 12/06/2015 (Sun), 11:59PM
+
+  1. Signal Handling Subsystem (160 pts)
+
+  An extension, or generalization, of Problem 2 in lab4, add a signal handling
+  subsystem to XINU. The signal handling subsystem resembles that of
+  UNIX/Linux where processes register signal handlers (i.e., callback
+  functions) that are invoked by the kernel when a specific event (e.g.,
+  alarm, message arrival) occurs. As in lab4, isolation/protection must be
+  preserved by running the signal handler in user mode. In XINU where we do
+  not have user/kernel mode separation, the signal handler is executed just
+  before the kernel returns. Following the design of asynchronous IPC in lab4,
+  we will run the signal handler in the context of the process that registered
+  it with the kernel. The current process, when a signal is raised (i.e., a
+  signal event occurs), may not be the process that registered the signal
+  handler. Hence calling of the signal handler may incur a delay until the
+  process that registered it is scheduled next.
+
+  Add a system call to register an asynchronous callback function defined as
+
+  syscall registercbsig( uint16 asig, int (* func) (void), uint32 optarg )
+  where the second argument is a function pointer to a signal handler as in
+  registercb() of Problem 2 in lab4. The first argument, asig, specifies a
+  signal (an unsigned 16-bit integer) that is defined in mysignal.h under
+  include/. You only need to support three signals:
+#define    MYSIGRECV 5
+#define    MYSIGALRM 6
+#define    MYSIGXCPU 7
+  The first signal MYSIGRECV corresponds to asynchronous message receive in
+  Problem 2, which is similar to SIGIO/SIGPOLL in UNIX/Linux. In UNIX/Linux,
+  SIGIO/SIGPOLL are also used for asynchronously handling packet arrivals on
+  network interfaces. Start by changing registercb() in lab4 to
+  registercbsig() which is a straightforward extension requiring minimal
+  change. The third argument optarg is ignored when the signal handler
+  corresponds to MYSIGRECV.
+  The second signal MYSIGALRM corresponds to SIGALRM in UNIX/Linux where a
+  user callback function is invoked when a timer expires. The duration of the
+  timer is specified through the third argument optarg (in unit of
+  millisecond). For example, if
+
+     if (registercbsig(MYSIGALRM,&myalrmhandler,500) != OK) {
+		       kprintf("alarm handler registration failed\n");
+			         return 1;
+					    }
+						is requested of the kernel, myalrmhandler() is invoked
+						500 msec in the future. As in lab4, the actual time
+						when myalrmhandler() is executed may incur a delay
+						since the current process may not be the one that
+						registered myalrmhandler() as noted above. The third
+						signal MYSIGXCPU corresponds to SIGXCPU in UNIX/Linux
+						which is raised by the kernel if a process exceeds a
+						given CPU time specified as the third argument in unit
+						of millisecond. For example, if
+						   if (registercbsig(MYSIGXCPU,&myalrmhandler,300) !=
+							   OK) {
+							         kprintf("xcpu handler registration
+									 failed\n");
+									       return 1;
+										      }
+											  is called by an app process,
+											  then the kernel raises the
+											  MYSIGXCPU signal when the app
+											  process has consumed 300 msec of
+											  CPU time. To support MYSIGXCPU,
+											  please use a XINU version that
+											  implements CPU usage monitoring
+											  of processes from Problem 4 in
+											  lab2. Note that for both
+											  MYSIGALRM and MYSIGXCPU, the
+											  signal events are driven by the
+											  clock interrupt handling
+											  component of the lower half of
+											  XINU.
+											  Make kernel modifications to
+											  implement registercbsig(). Test
+											  your enhanced kernel on two
+											  fronts: One, rerun the test
+											  cases of Problem 2, lab4, albeit
+											  with registercbsig() in place of
+											  registercb(). The output
+											  behavior should be equivalent.
+											  Two, create test cases through
+											  which correct functioning of
+											  MYSIGALRM and MYSIGXCPU can be
+											  gauged. Comment on your design
+											  and results in Lab5Answers.pdf
+											  (place it in system/).
+
+											  2. Memory Garbage Collection
+											  (160 pts)
+
+											  XINU uses getmem() to allocate
+											  heap memory from a single linked
+											  list of free memory segments and
+											  freemem() to return unused
+											  memory to the free memory pool.
+											  The kernel keeps track of
+											  per-process stack memory so that
+											  when a process terminates its
+											  stack memory is returned to the
+											  free memory list via freestk().
+											  This is not the case, however,
+											  for memory allocated by getmem()
+												  which gets only freed if a
+												  process explicitly
+												  deallocates memory by
+												  calling freemem() which is
+												  voluntary. That is, when a
+												  process terminates, any
+												  dynamic memory that it was
+												  allocated but has not freed
+												  remains allocated (see
+												  kill() which is called to
+												  terminate a XINU process).
+												  Even when an application
+												  programmer ardently tries to
+												  free allocated memory before
+												  exiting, programming
+												  mistakes and bugs may result
+												  in build-up of such memory
+												  garbage.
+
+												  Garbage collection systems
+												  aim to free allocated
+												  memory, while a process is
+												  still running, when it can
+												  be ascertained that a
+												  process does not need the
+												  memory anymore (i.e., all
+												  references/pointers to the
+												  memory have been deleted).
+												  We are tackling a more
+												  modest problem of ensuring
+												  that all memory allocated to
+												  a process through getmem(),
+												  where freed or not, are
+												  reclaimed by XINU when the
+												  process terminates which
+												  eliminates memory leakage by
+												  injecting garbage collection
+												  support inside the kernel.
+												  To do so, XINU must track
+												  dynamic memory allocation
+												  and deallocation on a
+												  per-process basis and return
+												  any unfreed memory when a
+												  process terminates to the
+												  free list.
+
+												  Design and implement garbage
+												  collection support in XINU
+												  by modifying the system
+												  calls, getmem() and
+												  freemem(), and relevant
+												  parts of the kernel that
+												  eliminates memory leakage.
+												  Test your garbage collection
+												  enabled XINU kernel on three
+												  test scenarios where each
+												  involves three concurrent
+												  processes that perform
+												  multiple getmem() and
+												  freemem() calls. To
+												  demonstrate correct
+												  functioning of your system,
+												  your test applications
+												  should do their own memory
+												  accounting to keep track of
+												  how much memory they have
+												  been allocated and how much
+												  memory they have freed and
+												  not freed before
+												  termination. One must be
+												  careful to do the accounting
+												  arithmetic correctly so that
+												  they accurately mirror the
+												  rounding performed in the
+												  XINU kernel. The result of
+												  the accounting done by an
+												  application must be compared
+												  with accounting performed
+												  inside the modified XINU
+												  kernel to gauge correctness
+												  of the garbage collection
+												  support. Describe the design
+												  of your specific
+												  implementation and results
+												  in Lab5Answers.pdf.
+
+												  Bonus Problem (50 pts)
+
+												  Garbage collection is a
+												  serious concern in today's
+												  apps where undisciplined
+												  coding that does not free up
+												  unneeded memory results in
+												  processes with bloated
+												  memory usage. Memory stress
+												  placed on the system,
+												  including thrashing, can
+												  significantly degrade app
+												  performance and user
+												  experience. From a kernel
+												  perspective, what approaches
+												  may be available to prevent
+												  bloated memory of user apps?
+												  We don't want to hold our
+												  breath hoping that app
+												  programmers suddenly change
+												  their ways. Think out of the
+												  box and describe what may be
+												  kernel-based solutions in
+												  Lab5Answers.pdf.
+
+												  Important: Please comment
+												  your code changes in XINU
+												  such that (a) where changes
+												  are made is highlighted, and
+												  (b) what changes are made is
+												  conveyed.
+
+												  Turn-in Instructions
+
+												  Electronic turn-in
+												  instructions:
+
+												          i) Go to the
+														  xinu-fall2015/compile
+														  directory and do
+														  "make clean".
+
+														          ii) Go to
+																  the
+																  directory of
+																  which your
+																  xinu-fall2015
+																  directory is
+																  a
+																  subdirectory.
+																  (NOTE:
+																  please do
+																  not rename
+																  xinu-f
+																  all2015, or
+																  any of its
+																  subdirectories.)
+
+																                  e.g.,
+																				  if
+																					  /homes/joe/xinu-fall2015
+																					  is
+																					  your
+																					  directory
+																					  structure,
+																					  go
+																					  to
+																					  /homes/joe
+
+																					          iii)
+																							  Type
+																							  the
+																							  following
+																							  command
+
+																							                  turnin
+																											  -c
+																											  cs354
+																											  -p
+																											  lab5
+																											  xinu-fall2015
+
+																											  You
+																											  can
+																											  check/list
+																											  the
+																											  submitted
+																											  files
+																											  using 
+
+																											  turnin
+																											  -c
+																											  cs354
+																											  -p
+																											  lab5
+																											  -v
+
+																											  Important:
+																											  The
+																											  TAs
+																											  will
+																											  be
+																											  replacing
+																											  your
+																											  main.c
+																											  when
+																											  testing
+																											  your
+																											  code.
+																											  Please
+																											  make
+																											  sure
+																											  not
+																											  to
+																											  declare
+																											  variables
+																											  inside
+																											  main.c
+																											  that
+																											  will
+																											  impact
+																											  compilation.
+																											  Please
+																											  provide
+																											  comments
+																											  inside
+																											  your
+																											  code
+																											  so
+																											  that
+																											  its
+																											  function
+																											  and
+																											  flow
+																											  can
+																											  be
+																											  conveyed
+																											  to
+																											  the
+																											  reader.
+																											  Turn
+																											  off
+																											  all
+																											  debugging
+																											  output
+																											  before
+																											  you
+																											  submit
+																											  your
+																											  code. 
+																											  Back
+																											  to
+																											  the
+																											  CS
+																											  354
+																											  web
+																											  page
+

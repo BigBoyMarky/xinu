@@ -1,0 +1,121 @@
+CS 354 Fall 2015
+
+Lab 0: Getting Acquainted with XINU (90 pts)
+
+Due: 09/09/2015 (Wed.), 11:59 PM
+
+1. Objectives
+
+The objectives of this introductory lab are to familiarize you with the
+process of compiling and running XINU, the tools involved.
+2. Readings
+
+XINU Setup handout
+Chapters 1 and 2 from the XINU textbook.
+3. Inspecting XINU's Run-time Environment [90 pts]
+
+Problem 3.1 (50 pts)
+
+Follow the instructions in the XINU Setup handout which compiles the XINU
+source code on a frontend machine in the XINU Lab, grabs an unused backend
+machine, and bootstraps the compiled XINU image. Note that the frontend PC's
+terminal acts as a (remote) console of the dedicated backend galileo x86
+machine. If XINU bootstraps successfully, it will print a greeting message and
+start a simple shell called xsh. Run some commands on the shell and then
+follow the disconnect procedure so that the backend is released. Do not hold
+onto a backend: it is a shared resource.
+
+Inside the system/ subdirectory, you will find the relevant source code of
+XINU. The file start.S contains assembly code that is executed after XINU
+loads on a backend. After performing bootstrap/initialization chores (the
+details are not relevant at this time), a call to function nulluser() is made.
+Find it in start.S and check what happens after nulluser() returns. Explain
+what you find.
+
+Within the source code in system/, find where nulluser() is defined. Toward
+the end of nulluser(), it calls the function create() to create a new running
+program (i.e., program) whose code is the function main() contained in main.c.
+In UNIX/Linux, to create a new process that runs a binary, say, /bin/ls, we
+first user fork() to create a child process and the call execve() with /bin/ls
+as an argument. How is XINU's way of creating and running new app proceses
+different from UNIX/Linux?
+
+Customize the welcome message printed by XINU so that it prominently displays
+your name and user ID. Preserve the new welcome message as part of your
+version of XINU during the rest of the semester and the labs to follow.
+Further, modify the XINU source so that the welcome message is printed by
+nulluser() and not from main(). When making changes to source code, insert
+comments within the code to document the changes you have made.
+
+Problem 3.2 (40 pts)
+
+In addition to removing the welcome message from main() to nulluser(), create
+two additional app processes from main() by calling create(). Keep the
+arguments of create(), except the name of the function to run, the same as
+when main was created from nulluser(). However, instead of using the symbol
+constants INITSTK and INITPRIO, find their actual values defined in the header
+files in include/ and use them instead. The first app process, lab0app1(),
+contained in its own file lab0app1.c should print a message of your choice
+followed by its process ID (PID) -- every running program (i.e., process) gets
+a unique identifier from the operating system which is a nonnegative integer
+-- and then terminate. Look through the code in system/ to find a function
+that returns a process's PID.
+The second app, running function lab0app2(), contained in lab0app2.c, should
+calculate 3782 times 751, print the result, followed by its PID, and
+terminate. Whenever you make changes to XINU, consider if changes to Makefile
+in compile/ is needed. Determine if that is the case for the changes you have
+made by inspecting Makefile.
+
+Provide the written answers of Problems 3.1 and 3.2 in Lab0Answers.pdf and
+place it in system/.
+
+Bonus Problem [40 pts]
+
+Extend the capability of XINU's xsh (source contained in shell/) by adding a
+new command of your choice. Compile and test XINU with the enhanced xsh.
+Indicate in Lab0Answers.pdf if you have done so. Provide documentation of the
+added feature as comments inside the source code.
+
+Note: The bonus problem provides an opportunity to earn extra credits that
+count toward the lab/hw component of the course. It is purely optional.
+
+Turn-in Instructions
+
+Electronic turn-in instructions:
+
+        i) Go to the xinu-fall2015/compile directory and run "make clean".
+
+		        ii) Go to the directory of which your xinu-fall2015 directory
+				is a subdirectory. (Note: please do not rename xinu-fall2015
+				or any of its subdirectories.)
+
+				                e.g., if /homes/bob/xinu-fall2015 is your
+								directory structure, go to /homes/bob
+
+								        iii) Type the following command
+
+										                turnin -c cs354 -p
+														lab0 xinu-fall2015
+
+														Important: You can
+														write code in main.c
+														to test your
+														procedures, but please
+														note that when we test
+														your programs we will
+														replace the main.c
+														file. Therefore, in
+														general, do not put
+														any functionality in
+														the main.c file.
+														Problems 3.1 and 3.2
+														are exceptions since
+														you are asked to
+														remove statements and
+														call create() from
+														main(). All debugging
+														output should be
+														turned off before you
+														submit your code. 
+														Back to the CS 354 web
+														page

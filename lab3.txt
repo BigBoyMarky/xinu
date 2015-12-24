@@ -1,0 +1,154 @@
+CS 354 Fall 2015
+
+Lab 3: Time Share (TS) Scheduling in a Modern Operating System (220 pts)
+
+Due: 10/23/15 (Fri.), 11:59 PM
+
+1. Objectives
+
+In this lab, you will implement time share (TS) scheduling of Solaris UNIX.
+This time-tested, server grade scheduler incorporates process behavior (CPU-
+vs. I/O-bound) into its decision making, and does so using constant (i.e.,
+O(1)) overhead with respect to time complexity. You will compare performance
+of the upgraded XINU scheduler with that of the fair scheduling version of
+XINU implemented in lab2.
+
+2. Readings
+
+Read Chapters 6-8 of the XINU textbook.
+3. Implementing UNIX Solaris time share (TS) scheduling in XINU [160 pts]
+
+When implementing Solaris TS scheduling in XINU, the three parts described
+below need to be coded and integrated to yield the final product. The separate
+descriptions in 3.1, 3.2 and 3.3 are for exposition purposes, not because they
+are independent components. All testing in Problem 4 must be done with the
+three parts in place.
+
+3.1 Implementing Solaris TS process classification
+
+Classification of processes based on their observed run-time behavior must be
+done by the kernel efficiently so that the scheduler's footprint is kept low.
+As discussed in class, a very simple strategy used by UNIX Solaris is to
+classify a process based on its most recent scheduling related activity: (a)
+if a process consumed all of its time slice and needed to be preempted by the
+	clock interrupt handler then the process is viewed as CPU-intensive; or
+	(b) if a process voluntarily relinquishes the CPU by making a blocking
+	system call (e.g., I/O or sleep) then the process is viewed as
+	I/O-intensive. Before the scheduler resched() function is called, the XINU
+	kernel must make note of which case applies to the current process. This
+	information is used by a modified resched() that implements Solaris TS
+	scheduling to promote, demote, or keep unchanged the current process's
+	priority (and associated quantum). A process that exhibits continued
+	I/O-bound behavior will result in successive promotion of its priority
+	whereas demotion will result for an CPU-bound process.
+
+	3.2 Implementing Solaris TS scheduling
+
+	The quantitative change in priority and quantum values should follow the
+	dispatch table used by Solaris:
+
+	Solaris UNIX dispatch table: TS
+	Columns 4 and 5 are safety mechanisms to prevent starvation if time-shared
+	scheduling goes awry and should be configured during initialization but
+	ignored for Problem 3. Specify these values in a kernel header file
+	ts_disptb.h under include/
+	struct ts_disptb {
+		  int ts_tqexp;         // new priority: CPU-bound (time quantum
+		  expired)
+		    int ts_slpret;        // new priority: I/O-bound (sleep return)
+			  int ts_quantum;       // new time slice
+	};
+
+	extern struct ts_disptb tsdtab[];
+	which is read to initialize a kernel data structure
+	struct ts_disptb tsdtab[60];
+	in initialize.c. It's preferable to replace the constant "60" using
+	#define in ts_disptb.h. Choose your own name for the constant definition.
+	Note that in Solaris, the TS scheduling table is exported as a
+	configurable kernel data structure.
+	You will need to determine what initial priority to assign a newly created
+	process. For example, choosing a priority value in the mid-range (e.g.,
+	29) when calling create() is one possibility. Another is to ignore
+	whatever priority value is specified in the system call create() and set
+	it to a fixed, initial value (you will need to modify create()) inside the
+	XINU kernel. As in lab2, the null process needs special handling so that
+	it only runs when there are no ready processes in the system. Describe in
+	Lab3Answers.pdf (place it under system/) how you perform these tasks.
+
+	3.3 Constant overhead scheduling: multilevel feedback queue
+
+	A kernel is broadly divided into two major parts called halves: an upper
+	half that deals with top-down system calls and a bottom half that deals
+	with bottom-up interrupts. XINU's scheduler resched(), which may be viewed
+	as lying in-between the two halves, is invoked bottom-up by the clock
+	interrupt handler (see clkdisp.S and clkhandler.c) when a process's
+	quantum is depleted. Overall, the parts of XINU code that need to be
+	changed to implement Solaris TS scheduling are similar to those of fair
+	scheduling in lab2.
+
+	However, a significant improvement, and change, from static priority XINU
+	and the fair scheduling version of XINU is implementation of multilevel
+	feedback queue to effect constant time complexity scheduling. Define your
+	own multilevel feedback queue data structure and put it in the header file
+	multilevelfbq.h under include/. The linear time priority queue of lab2
+	(and static priority XINU) is disabled and superseded by the multilevel
+	feedback queue when you evaluate the TS version of XINU in Problem 4.
+
+	4. Performance evaluation of XINU's TS scheduling [60 pts]
+
+	Perform the same benchmark testing with different process workloads as in
+	Problem 5 of lab2 to evaluate the performance of your XINU TS scheduling
+	implementation. Compare the results with those of lab2. Discuss your
+	findings in Lab3Answers.pdf.
+
+	Bonus Problem [40 pts]
+
+	Our aim is to evaluate the scheduling overhead of TS XINU as the number of
+	processes increases. To do so, create a fourth type of test scenario (in
+	addition to all processes are CPU-bound, all are I/O-bound, half-and-half)
+	that allows gauging of the constant time overhead of Solaris's multilevel
+	feedback queue scheduler. Use only CPU-bound processes so that all
+	processes are always ready. Increase the number of processes across
+	different runs and measure how the scheduling overhead varies as a
+	function of the number of processes. Discuss in Lab3Answers.pdf how you go
+	about measuring the scheduling overhead of TS XINU. There are multiple
+	possibilities such as taking a time stamp before and after calling
+	resched() (e.g., using clktimefine from lab2). Some methods will be more
+	effective than others for the specific problem at hand.
+	Turn-in Instructions
+
+	Electronic turn-in instructions:
+
+	        i) Go to the xinu-fall2015/compile directory and do "make clean".
+
+			        ii) Go to the directory of which your xinu-fall2015
+					directory is a subdirectory. (NOTE: please do not rename
+					xinu-fall2015, or any of its subdirectories.)
+
+					                e.g., if /homes/joe/xinu-fall2015 is your
+									directory structure, go to /homes/joe
+
+									        iii) Type the following command
+
+											                turnin -c cs354 -p
+															lab3 xinu-fall2015
+
+															You can check/list
+															the submitted
+															files using 
+
+															turnin -c cs354 -p
+															lab3 -v
+
+															Important: Please
+															provide comments
+															inside your code
+															so that its
+															function and flow
+															can be conveyed to
+															the reader. Turn
+															off all debugging
+															output before you
+															submit your code. 
+															Back to the CS 354
+															web page

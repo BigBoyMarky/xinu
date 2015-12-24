@@ -1,0 +1,282 @@
+CS 354 Fall 2015
+
+Lab 2: Monitoring and Manipulating the Run-time State of Processes and Fair
+CPU scheduling. (280 pts)
+
+Due: 10/07/15 (Wed.), 11:59 PM
+
+1. Objectives
+
+You will exploit a weakness of unprotected process stacks to create an
+attacker process that "hijacks" a victim process that induces the victim to
+execute the attacker's code. You will modify the XINU kernel so that it
+actively monitors the run-time behavior of processes, in particular, their CPU
+usage. You will enhance XINU's static priority scheduler so that it runs a
+"fair" time share scheduling algorithm that balances CPU allocation among I/O-
+and CPU-bound processes.
+
+2. Readings
+
+Based on reading of Chapter 4 of the XINU textbook in Lab 1, review lecture
+slides pp. 67-90 on list manipulation.
+Read Chapter 5 of the XINU textbook.
+3. Hijacking a Process through Stack Smashing [60 pts]
+
+Spawn two processes using create() from main() of equal priority and stack
+size 4KB. The first process created executes a function, void myvictim(void),
+and the second process runs function, void myattacker(void). create() is
+immediately followed by resume() to remove from suspension. Define a global
+variable, int myvictimglobal = 0, in main.c.
+
+The process that executes myvictim() --- and which runs before the
+myattacker() process --- makes two nested function calls where the second
+function calls sleepms() to sleep for 2 seconds. Declare local variables in
+the two functions and make them perform simple calculations. The specifics are
+up to you. When the function calls eventually return to myvictim(), it prints
+the value of myvictimglobal before terminating.
+
+The process that executes myattacker() runs after the myvictim() process ---
+i.e., after myvictim() calls sleepms() --- and its job is to "hijack" the
+myvictim() process. By this we mean: Upon calling sleepms() XINU puts the
+first process to sleep after saving the state of the process, referred to as
+context switching out. The run-time stack of the first process will have at
+the top of its stack the stack frame of sleepms() and below it the stack frame
+of the function that called sleepms(). Under normal operation, after 2 seconds
+have elapsed, the first process will become ready and eventually resume
+execution where sleepms() returns to its caller (say some function xyz()) and
+xyz(), in turn, returns to its caller.
+
+When myattacker() runs while myvictim() is sleeping, it will manipulate the
+run-time stack of myvictim() so that one of the return addresses pushed onto
+the run-time stack of the victim process --- it is up to you to pick which
+stack frame -- is changed to an address that points to a function that
+"belongs to" myattacker(). Let us call it, void myattackermalware(void). The
+process myattacker(), itself, does not make a call to myattackermalware(). Nor
+does myvictim(), at least not voluntarily. By corrupting a return address in
+the run-time stack of the victim, the attacker induces the victim to
+unwittingly run code belonging to the attacker, i.e., malware, that it was not
+designed/coded to run. Inside myattackermalware(), set myvictimglobal to 1 and
+print its value.
+
+When testing your attacker/victim code, first run the victim process without
+activating the attacker to observe its normal run where, at the end, the
+victim prints the value of myvictimglobal which should be 0. When creating the
+attacker process, following spawning of the victim process, a successful stack
+smash should result in myattackermalware() being invoked by the victim
+process. Verify the identity of who is printing what by prepending each print
+action with the current process's PID. Use the global variable currpid to
+access the current process's PID instead of calling getpid().
+
+What happens to the victim process after myattackermalware() finishes, i.e.,
+returns? Discuss your findings in Lab2Answers.pdf and place it in the system/
+directory.
+
+4. Monitoring CPU Usage of Processes [60 pts]
+
+A basic kernel facility is to monitor CPU usage of processes. The measurements
+may be used for scheduling, accounting, and other purposes. One approach to
+monitoring is to use the kernel's event tracking timer, called system timer,
+to measure the cumulative CPU time allocated to a process. We will discuss
+clock management, including use of special clock hardware in x86, later in the
+course. For present purposes, it suffices to note that one of the hardware
+clocks is programmed in XINU to interrupt every 1 msec which invokes
+clkhandler() (see clkdisp.S and clkhandler.c in system/). This time interval
+is called a tick.
+
+XINU uses clktime of type uint32 to keep track of the total number of seconds
+elapsed since boot strapping on a backend. Define another global, clktimefine
+of the same type, to keep track of total time elapsed at granularity of 1
+msec. clktimefine faces wrap-around (i.e., the counter eventually reaches its
+maximum and resets to counting from 0) much sooner than clktime. Unless you
+hog a XINU backend --- which you shouldn't --- the wrap-around problem
+shouldn't matter for this lab and is to be ignored. Define clktimefine in the
+same header file as clktime. Define a new field as a process table entry,
+called prcpuused, of type uint32, that is used by XINU to keep track of the
+CPU time used by a process. To do so, when allocating CPU to a process by
+context switching it in, the current value of clktimefine is remembered, and
+when it is context switched out in the future, this value is subtracted from
+clktimefine to yield the CPU time used by the process.
+
+Modify XINU to enable monitoring CPU usage of processes. Describe your
+implementation in Lab2Answers.pdf. Re-run the test cases of Problems 4.1 and
+4.3 from lab1 with the kernel's monitoring facility. Compare the results of
+CPU usage from measurements to observations that you advanced in lab2. Discuss
+your findings in Lab2Answers.pdf.
+
+5. Fair Time Share Scheduling [160 pts]
+
+As discussed in class, a dominant paradigm of "fair" scheduling in operating
+systems such as UNIX and Windows (and until recently Linux) has been
+classifying processes into CPU- and I/O-bound processes based on their
+run-time behavior, which is then used to adjust their priorities and time
+slices dynamically. For example, a CPU-intensive process tends to hog the CPU,
+not relinquishing it voluntarily through blocking system calls, which requires
+preemption of the process by the scheduler so that the shared CPU is not
+monopolized. Preemption is effected by the clock interrupt handler (see
+clkdisp.S and clkhandler.c) which keeps track of the time slice consumed by a
+process --- part of the clock interrupt handler's bookkeeping activity --- and
+calls the scheduler (see resched.c) when the time budget maintained in global
+variable preempt is depleted (i.e., reaches zero).
+
+In contrast, an I/O-intensive process tends to make system calls to engage a
+kernel's I/O services. In the case of a read related system call such as
+reading from an I/O device, if data from an I/O device (e.g., web server
+waiting on client request packets on an Ethernet card) is not available, the
+default agreement between a process making the read related system call and
+the kernel is that the process in question is put in a blocking state and
+context-switched out so that a highest priority ready process may utilize the
+CPU. When an event (e.g., packet arrival) that the process is blocking on
+eventually occurs, the kernel will unblock the process and put it in the ready
+state so that the scheduler, when invoked next in the future, will consider
+the unblocked process in its scheduling decision.
+Since I/O-intensive processes often relinquish the CPU voluntarily through
+blocking system calls whereas CPU-intensive processes hog the CPU and must be
+"forcefully" preempted, it makes intuitive sense to assign I/O-intensive
+processes higher priorities relative to CPU-intensive processes. That is, when
+a blocked I/O-intensive process becomes unblocked (such unblocking events are
+processed by the kernel's interrupt service routines), it is desirable that
+the kernel's scheduler is invoked which then preempts a CPU-intensive process
+that is currently occupying the CPU and context-switches in the unblocked
+I/O-intensive process. This will, hopefully, promote fair sharing of CPU
+cycles between CPU- and I/O-bound processes. Since I/O-bound processes, by
+their nature, consume less CPU cycles than CPU-bound processes, they are
+rewarded by increased responsiveness compared to CPU-bound processes when they
+become ready to run.
+
+Modify XINU so that it implements dynamic priority scheduling where process
+priorities are continually changed to achieve equitable sharing of CPU cycles
+by I/O- and CPU-bound processes. At any instance of time, the priority of a
+process is defined as 1 / prcpuused where prcpuused is the cumulative CPU
+usage of a process as defined in Problem 4. Thus the smaller the amount of CPU
+time a process has received, the higher its priority relative to processes
+that have received a larger share. When a process is created, initialize its
+prcpuused to 1 (the default tick value of XINU) so that we do not divide by 0.
+Instead of maintaining 1 / prcpuused as a real number, use a priority queue
+where processes are sorted in nondecreasing order of prcpuused. That is, a
+process with the smallest cumulative CPU time received is at the front of the
+list. This priority queue should only hold ready processes, i.e., processes
+that are ready to use the CPU. Since we won't be discussing I/O until later in
+the semester, we will consider I/O-bound processes as those who call sleepms()
+and thereby voluntarily relinquish the CPU.
+
+Consult XINU's existing ready list which sorts ready processes in
+nonincreasing order which places a highest priority process at the front of
+the priority queue. Your revised priority queue sorts ready processes in the
+reverse order ("lower value means higher priority"). This is the approach
+followed by BSD versions of UNIX. An I/O-bound process --- in our case, a
+process that sleeps a lot --- will accumulate less CPU time, hence when it
+wakes up from sleep and become ready to run, it will get assigned a high
+priority relative to CPU-bound processes. I/O-bound processes get compensated
+for using less CPU by receiving better responsiveness. Lastly, set the time
+	slice variable preempt to 10 msec (through the constant QUANTUM) so that
+	the scheduler resched() gets a chance to preempt a CPU-bound process.
+
+	To evaluate how well the dynamic fair scheduling implementation in XINU
+	balances fairness and performance of CPU- and I/O-bound processes,
+	consider the following three test case scenarios.
+
+	All processes are CPU-intensive. In the first test case, create 4
+	processes that run the same program cpuintensive(). Put the code of
+	cpuintensive() in a separate file cpuintensive.c. Assign the same initial
+	priority value 1 when calling create() from main(), and set QUANTUM in
+	kernel.h to 10 msec. The code structure of cpuintensive() should follow:
+	for (i=0; i<LOOP1; i++) {
+		  for (j=0; j<LOOP2; j++) {
+			      // Insert code that performs memory copy (slow) and/or
+				      // ALU operations (fast).
+					      // Note: this loop consumes significant CPU cycles.
+						    }
+							  // Using kprintf print the pid followed the
+							  // outer loop count i,
+							    // the process's priority and remaining time
+								// slice (preempt).
+	}
+	// Print the CPU time consumed by the process that is recorded in the
+	// prcpuused field of the current process's process table entry.
+	Note, that XINU's null process should only run if there are no ready
+	processes in the system. Implement a design choice that makes it so and
+	describe your solution in Lab2Answers.pdf. In the write-up, discuss the
+	output that you observe and whether they indicate fair sharing of CPU
+	cycles by the 4 processes. You will need to experiment with different
+	values of LOOP1 and LOOP2 to induce CPU sharing via context switching and
+	resultant output that can be easily interpreted for gauging your
+	implementation of TS scheduling performance.
+
+	All processes are I/O-intensive. Follow the same steps as above but
+	replace cpuintensive() by iointensive() (in iointensive.c) which has the
+	same code structure as cpuintensive() except that the code in the inner
+	loop (for ALU and memory copy) is replaced by a single call to sleepms().
+	By varying the argument of sleepms() you can change the degree to which
+	iointensive() is prone to blocking and voluntarily relinquishing the CPU.
+	When testing, use the same sleep time as argument to sleepms() for all 4
+	instances of I/O-intensive processes. In Lab2Answers.pdf, include a
+	discussion of the results observed and your assessment of fairness by the
+	dynamic priority scheduler.
+
+	Half-and-half: . Create 4 processes where half execute cpuintensive() and
+	the other half execute iointensive(). In the first part of the evaluation,
+	under this mixed workload of CPU- and I/O-intensive processes, determine
+	if the 2 CPU-intensive processes --- among themselves --- achieve equal
+		sharing of CPU cycles as indicated by the output. Do the same for the
+		2 I/O-intensive processes with their sleep time arguments to sleepms()
+		fixed to the same value. Evaluate CPU sharing between the two groups
+		of processes --- CPU- and I/O-bound --- and discuss your findings in
+		Lab2Answers.pdf.
+		Bonus Problem [30 pts]
+
+		The above version of fair scheduling has an obvious flaw in that a
+		newly created process, compared to existing long-running processes,
+		will receive elevated priority for a prolonged period during which the
+		long-running processes may starve. Our benchmark scenarios in Problem
+		5 do not encounter this issues since the concurrent test processes are
+		created close together in time. What might be a solution that
+		mitigates this problem? Describe your solution and argue its efficacy
+		in Lab2Answers.pdf.
+
+		Turn-in Instructions
+
+		Electronic turn-in instructions:
+
+		        i) Go to the xinu-fall2015/compile directory and do "make
+				clean".
+
+				        ii) Go to the directory of which your xinu-fall2015
+						directory is a subdirectory. (NOTE: please do not
+						rename xinu-fall2015, or any of its subdirectories.)
+
+						                e.g., if /homes/joe/xinu-fall2015 is
+										your directory structure, go to
+										/homes/joe
+
+										        iii) Type the following
+												command
+
+												                turnin -c
+																cs354 -p lab2
+																xinu-fall2015
+
+																You can
+																check/list the
+																submitted
+																files using 
+
+																turnin -c
+																cs354 -p lab2
+																-v
+
+																Important:
+																Please provide
+																comments
+																inside your
+																code so that
+																its function
+																and flow can
+																be conveyed to
+																the reader.
+																Turn off all
+																debugging
+																output before
+																you submit
+																your code. 
+																Back to the CS
+																354 web page

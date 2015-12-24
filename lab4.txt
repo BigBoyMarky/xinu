@@ -1,0 +1,330 @@
+CS 354 - Fall 2015
+
+Lab 4: Timed Blocking Send and Asynchronous IPC with Callback Function (280
+pts)
+
+  Due: 11/12/2015 (Thu), 11:59PM
+
+  1. Timed Blocking Message Send (100 pts)
+
+  Problem 1 concerns the implementation of a blocking version of send(), call
+  it sendbt(). sendbt() follows the same function definition as send() but has
+  an additional (i.e., third) argument that allows for timed blocking similar
+  to recvtime(). The additional argument, maxwait, is of type int32 and
+  specifies how long a process may block before it returns. If its value is 0,
+  then sendbt() becomes a blocking send() that may wait indefinitely. If its
+  value is negative, an error should be returned.
+
+  If the receiver's 1-word message buffer is empty, sendbt() behaves as
+  send(). If the receiver's buffer is full, however, sendbt() blocks, i.e.,
+  the kernel context switches out the calling process and puts it into a
+  waiting state, call it SENDING. This is implemented by defining an
+  additional state constant PR_SEND (choose what value to assign it to) in
+  process.h. The 1-word message that makes the calling process block —
+  note that there can be only one such message outstanding in XINU's
+  process/thread model — is stored in the calling process's process table
+  entry by defining two additional fields:
+
+  umsg32     sndmsg;
+  bool8         sndflag;
+  where sndmsg holds the 1-word message and sndflag is nonzero if sndmsg is
+  valid. If, in addition, maxwait > 0, then the sending process is inserted in
+  the sleep queue to be woken up after maxwait time (in unit of millisecond).
+  When the receiver buffer eventually clears and the blocked process succeeds
+  in sending a message before the maxwait sleep expires, the process must be
+  removed from the sleep queue.
+  On the receiver side, before a receiving process returns from receive() it
+  must check if there are any blocked sending processes, and if so, unblock
+  one of the waiting processes. When implementing "unblock" there are at least
+  three issues to consider: one, whom to unblock, two, how to unblock, and
+  three, where to queue the list of blocked processes. Assume the semantics
+  exported to the application programmer is a FIFO message buffer. Hence the
+  sending process that blocked first is put into READY state. If the process
+  had performed a timed sendbt(), then it must also be removed from the sleep
+  queue. To improve performance, implement a per-receiving process queue of
+  blocked processes in SENDING state so that dequeueing and enqueueing time
+  are dependent only on the number of processes sending to the same process.
+
+  There is a degree of freedom in how to implement the blocking queues and
+  related data structures. Make sure to explain your design decisions and
+  rationale in Lab4Answers.pdf (place it under system/).
+
+  Create four test cases whose output (e.g., senders may print sender-specific
+  1-word messages before calling sendbt() and a receiver may print a received
+  message) demonstrate the correct functioning of the blocking timed message
+  send extension of kernel services. Print the current time (use the global
+  time mechanism of lab2) before calling sendbt() and the time after sendbt()
+  returns, along with the process ID. Use the sleepms() system call in
+  conjunction with busy looping to craft your test cases. It is important to
+  benchmark a system when it is stressed, hence use several sending processes
+  in your tests.
+
+  2. Asynchronous Message Receive (180 pts)
+
+  This problem concerns implementation of asynchronous receive in XINU using a
+  callback function that the application programmer (i.e., XINU process)
+  registers with the kernel. If a 1-word message is sent to the receiver, the
+  kernel ensures that the registered callback function is eventually executed
+  in the context of the receiving process. Note that in asynchronous IPC, the
+  sender process must run (i.e., be the current process) to send a message
+  using send(). In asynchronous I/O, a message may arrive on a network
+  interface (e.g., Ethernet card) whose intended recipient is the current
+  process. The kernel code of send() handles the chore of processing the
+  received message so that the callback function registered by the receiver
+  process is run when it is scheduled to run in the future.
+
+  The kernel exports a system call, registercb(), that is used by an
+  application to specify a user space callback function that should be
+  executed when a message is received. For simplicity, we will adhere to the
+  convention that a callback function must be of type int and contain no
+  argument. The function definition is given by
+
+  syscall registercb( int (* func) (void) )
+  where func is a function pointer to a user space callback function. What the
+  callback function does is up to the programmer. For example, a callback
+  function might perform
+     int myrecvhandler(void) {
+		    extern umsg32 msgglob;
+
+			      msgglob = receive();
+				        return(OK);
+						   }
+						   where msgglob is a global variable wherein the
+						   received message is stored. Although receive() is a
+						   blocking system call, it will not block since
+						   myrecvhandler() was invoked after a message was
+						   received. main() registers asynchronous message
+						   receive with the kernel using
+						      if (registercb(&myrecvhandler) != OK) {
+								        kprintf("recv handler registration
+										failed\n");
+										      return 1;
+											     }
+												 The body of main(), for
+												 testing purposes, can be an
+												 infinite loop that keeps the
+												 CPU occupied (i.e.,
+												 CPU-bound). To track events
+												 when receiver and sender
+												 processes are running, add
+												 kprintf() statements in the
+												 callback function and sender
+												 code that output the PID
+												 along with a time stamp (use
+												 the global time counter from
+												 lab2) and message being
+												 received/sent.
+												 To achieve
+												 isolation/protection, the
+												 kernel runs the receiver's
+												 callback function in the
+												 context of receiver process
+												 when it is scheduled next. By
+												 default, use the TS scheduler
+												 from lab3. However, if you
+												 prefer, you may use the
+												 scheduler from lab2 or XINU's
+												 original static priority
+												 scheduler. Please indicate in
+												 Lab4Answers.pdf if you do not
+												 use the TS scheduler.
+
+												 Upon being context switched
+												 in at some point in the
+												 future (which incurs a delay
+												 from the moment of message
+												 send), the kernel will
+												 manipulate the receiver
+												 process's context so that it
+												 does not resume where it left
+												 off but first calls (i.e.,
+												 jumps to) the callback
+												 function myrecvhandler().
+												 When the callback function
+												 returns, the process resumes
+												 where it left off before it
+												 was context switched out. It
+												 is the kernel's job to
+												 guarantee that the callback
+												 function is executed in the
+												 receiver process's context
+												 seamlessly and transparently
+												 (with respect to the receiver
+												 process). In Lab4Answers.pdf,
+												 describe the design of your
+												 solution and implementation.
+												 Devise your own solution but
+												 keep in mind: most lab
+												 solutions are typically short
+												 and compact.
+
+												 In XINU where there is no
+												 separation between user and
+												 kernel mode, executing the
+												 receiver's callback function
+												 in the receiver process's
+												 context in user mode provides
+												 no benefit. However, in
+												 modern operating systems such
+												 as UNIX/Linux, Windows where
+												 isolation/protection is
+												 essential, the above approach
+												 continues to preserve this
+												 critical property. Provide
+												 three test cases that
+												 demonstrate the correct
+												 functioning of the
+												 asynchronous message receive
+												 extension of the XINU kernel.
+
+												 Bonus Problem (30 pts)
+
+												 Following the general man
+												 page convention/format of
+												 system calls in Linux (e.g.,
+												 confer
+												 http://www.linuxhowtos.org/System/creatingman.htm),
+												 write a man page for the
+												 timed blocking send system
+												 call sendbt(). Submit it as
+												 sendbt.2, an ASCII text file,
+												 in system/. That is, ignore
+												 the groff/troff document
+												 formatting component, and
+												 focus on what sections a
+												 system call man page should
+												 have and the content
+												 contained therein.
+
+												 Important: Please comment
+												 your code changes in XINU
+												 such that (a) where changes
+												 are made is highlighted, and
+												 (b) what changes are made is
+												 conveyed.
+
+												 Turn-in Instructions
+
+												 Electronic turn-in
+												 instructions:
+
+												         i) Go to the
+														 xinu-fall2015/compile
+														 directory and do
+														 "make clean".
+
+														         ii) Go to the
+																 directory of
+																 which your
+																 xinu-fall2015
+																 directory is
+																 a
+																 subdirectory.
+																 (NOTE: please
+																 do not rename
+																	 xinu-f
+																	 all2015,
+																	 or any of
+																	 its
+																	 subdirectories.)
+
+																                 e.g.,
+																				 if
+																					 /homes/joe/xinu-fall2015
+																					 is
+																					 your
+																					 directory
+																					 structure,
+																					 go
+																					 to
+																					 /homes/joe
+
+																					         iii)
+																							 Type
+																							 the
+																							 following
+																							 command
+
+																							                 turnin
+																											 -c
+																											 cs354
+																											 -p
+																											 lab4
+																											 xinu-fall2015
+
+																											 You
+																											 can
+																											 check/list
+																											 the
+																											 submitted
+																											 files
+																											 using 
+
+																											 turnin
+																											 -c
+																											 cs354
+																											 -p
+																											 lab4
+																											 -v
+
+																											 Important:
+																											 The
+																											 TAs
+																											 will
+																											 be
+																											 replacing
+																											 your
+																											 main.c
+																											 when
+																											 testing
+																											 your
+																											 code.
+																											 Please
+																											 make
+																											 sure
+																											 not
+																											 to
+																											 declare
+																											 variables
+																											 inside
+																											 main.c
+																											 that
+																											 will
+																											 impact
+																											 compilation.
+																											 Please
+																											 provide
+																											 comments
+																											 inside
+																											 your
+																											 code
+																											 so
+																											 that
+																											 its
+																											 function
+																											 and
+																											 flow
+																											 can
+																											 be
+																											 conveyed
+																											 to
+																											 the
+																											 reader.
+																											 Turn
+																											 off
+																											 all
+																											 debugging
+																											 output
+																											 before
+																											 you
+																											 submit
+																											 your
+																											 code. 
+																											 Back
+																											 to
+																											 the
+																											 CS
+																											 354
+																											 web
+																											 page
+

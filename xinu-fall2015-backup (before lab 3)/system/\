@@ -1,0 +1,11 @@
+#include <xinu.h>
+
+void printsegaddress() {
+
+	kprintf("Start of text: 0x%08x\n");
+	kprintf("End of text: 0x%08x\n", &extext);
+	kprintf("Start of data: 0x%08x\n");
+	kprintf("End of data: 0x%08x\n", &edata);
+	kprintf("Start of bss: 0x%08x\n");
+	kprintf("End of bss: 0x%08x\n", &end);
+}

@@ -1,0 +1,223 @@
+CS 354 Fall 2015
+
+Lab 1: Run-time Environment of XINU Processes and Static Priority Scheduling
+(210 pts)
+
+Due: 09/21/15 (Mon.), 11:59 PM
+
+1. Objectives
+
+Familiarization with XINU's run-time environment and default fixed priority
+CPU scheduling of XINU processes.
+2. Readings
+
+Read Chapters 3-4 of the XINU textbook.
+3. Adding Functions to XINU Source Code [90 pts]
+
+Problem 3.1 (30 pts)
+
+Write a function 
+
+long host2netl(long x) 
+
+that converts the argument x from host byte order to network byte order (i.e.,
+Big Endian). This function should be entirely written in x86 assembly
+following AT&T syntax. Do not use in-line assembly (i.e., do not  use
+asm("...")) or compiler/assembler generated output. You can assume that the
+size of long is 4 bytes and the byte order of the host machine is Little
+Endian. Save the code in a file host2netl.S under system/. Test that the
+function works correctly by calling it from the XINU process running main().
+
+Problem 3.2 (20 pts)
+
+Write a function 
+
+void printsegaddress() 
+
+that prints the address of the start and end of the text, data, and bss
+segments of the XINU OS. Print the 4 bytes (in hexadecimal) following the
+start of the three segment boundaries. Calculate and print the lengths of the
+text, data, and bss segments. Save the code in a file printsegaddress.c under
+system/. Test that the function works correctly by calling it from the XINU
+process running main(). Note how XINU makes use of linker generated external
+variables for the segment boundaries (text, data, bss) by inspecting code in
+system/ and include/ (grep can be helpful).
+
+Problem 3.3 (40 pts)
+
+Write a function 
+
+int stackdepth() 
+
+that inspects how many nested function calls (i.e., stack frames) have been
+made, including the call to stackdepth(), by the current process and returns
+the value to the caller. Note that stackdepth() and any function calls made
+within stackdepth() produce additional stack frames in the current process's
+run-time stack. To access the last stack frame pushed onto the run-time stack,
+use the in-line assembly function asm() to read the values of %esp and %ebp
+and save them into local variables 
+
+unsigned long *top_esp, *top_ebp; 
+
+of stackdepth(). Making use of the CDECL caller/callee convention discussed in
+class, iteratively follow the frame pointers starting at top_ebp and inspect
+the stack frames that were pushed in the run-time stack. The bottom of the
+run-time stack is recorded in a data structure called a symbol table 
+
+procentproctab[NPROC]; 
+
+in the field/member prstkbase. You can find the definition of procent in
+include/. The PID of the current process is available in the global variable
+currpid. While iterating (or backtracking) through the frames of the run-time
+stack, count the number of stack frames traversed (the very top given by
+top_ebp, top_esp counts as 1), print the count value, ebp and esp values of
+the each stack frame as it is traversed. Also print the difference of ebp, esp
+which gives the size of each stack frame. Addresses/pointers should be printed
+in hexadecimal format. After the bottom of the run-time stack is reached,
+stackdepth() should print the address of the bottom and return the count of
+the frame stacks it has traversed (i.e., depth).
+
+Note that the very act of inspecting the run-time stack with the help of
+stackdepth() (and its in-line function asm()) disturbs the run-time stack by
+pushing additional stack frames. The system call stacktrace() in system/
+performs a more comprehensive backtrack of a process's run-time stack which
+you can examine. However, write your own code that focuses on efficiently
+accomplishing the task at hand from scratch, not by pruning the code of
+stacktrace().
+
+Put the code of stackdepth() in stackdepth.c under system/. Make nested
+function calls from XINU's process running main() and test that your
+stackdepth() function works correctly. When compiling, you will need to update
+Makefile in compile/ to include the option -fno-omit-frame-pointer to force
+gcc to use the frame pointer. By default, gcc stopped using ebp to keep track
+of caller/callee stack frame boundaries a couple of years back.
+
+4. Static Priority Scheduling of XINU Processes [80 pts]
+
+Priority scheduling is at the heart of modern kernels such as UNIX, Linux, and
+Windows, and, yes, even XINU. As discussed in class, given a set of processes
+with priority values within some range (typically a nonnegative integer), a
+priority scheduler when invoked---a scheduler is part of kernel code---picks a
+highest priority ready process to run next. A process is ready if it is not
+sleeping or blocking on an event (e.g., waiting on an I/O event such as packet
+arrival) and, therefore, is able to make use of a CPU (or core in multi-core
+systems). By default, our discussion assumes a uniprocessor or single-core
+system which a galileo backend is. When there are two or more ready processes
+of highest priority, the CPU is allocated in a round-robin fashion among them. 
+
+The main difference between XINU and kernels such as UNIX, Linux, and Windows
+is that XINU implements static priority scheduling. As noted in class, the
+create() system call that is used to spawn a new process takes as its third
+argument a priority value that is assigned to the newly created process.
+Unlike other kernels where an initial priority is dynamically adjusted during
+the lifetime of a process, in XINU priorities stay fixed. Thus XINU implements
+static priority scheduling whereas UNIX et al. implement dynamic priority
+scheduling. In the following, you will create multiple processes in XINU with
+different priorities, observe their resultant CPU sharing behavior, and
+explain their behavior by (mainly) studying resched.c in system/. You will
+also find that XINU enforces process time slices (or quanta), also common to
+UNIX, Linux, and Windows, that limit how long a process can use the CPU. This
+time budget is given by the constant QUANTUM. Find its default value in
+include/ and set it to a larger value, say, 10 msec (millisecond).
+Create four processes, each running the same program, void printloop(char
+val), which takes a single argument val of type int. When using create() from
+main(), the four processes should be created with stack size 1024 bytes and
+equal priority 20. The arguments passed for val should be 'A', 'B', 'C', 'D'.
+At the end of the fourth create() system call, we will have 6 processes: the
+"parent" process running main() with default priority INITPRIO that spawned
+the four "child" processes of equal priority 20, and the null process crafted
+at the end of XINU initialization in initialize.c. Check the XINU source to
+determine priorities of the main() and nulluser() processes. 
+
+After creating the four processes, the parent process should invoke resume()
+four times with the process ID (pid) values of its four children. Before each
+resume() system call, the parent process should print 'P'. Thus at the end of
+the fourth resume(), the terminal output should show four 'P' characters,
+possibly interleaved with outputs generated by the child processes. The parent
+process sleeps for 4 seconds after the fourth call to resume(). Use the
+sleepms() system call for this purpose given in sleep.c. The code of
+printloop() is simple: an outer loop determined by the loop bound OUTERB, and
+a nested inner loop determined by the loop bound INNERB. Within the outer
+loop, but outside the inner loop and preceding it, printloop() outputs val.
+Set INNERB to a "large" value of your choosing so that each outer loop
+iteration consumes sufficient CPU cycles so that within a single time slice
+the outer loop is not completed. Set OUTERB to 5. 
+
+When running the above, what outputs do you observe? Are the 'P' characters
+printed by the parent process interleaved by outputs from its children?
+Explain your findings by tying the observed behavior to relevant XINU kernel
+code in system/ and the fact that XINU implements static priority scheduling. 
+[40 pts]
+
+Set the priority values of the four processes using create() to 20, 20, 20,
+and 50. How do the results compare to the output of Problem 4.1? 
+[20 pts]
+
+Set the priority values of the four processes to 20, 20, 50, and 50. How do
+the results compare to the output of Problem 4.2? 
+[20 pts]
+Discuss your findings in Lab1Answers.pdf and place it in system/.
+
+5. Stack Layout of Concurrent XINU Processes [40 pts]
+
+Modify the printloop() function used to create four processes in Problem 4.1,
+call it printnoloop(), such that printnoloop() prints the argument passed,
+calls stackdepth() from Problem 3.3, prints the value returned, and sleeps (by
+calling sleepms()) for 10 seconds. Remove the inner/outer loops. The
+parameters used to spawn the four processes using create() remain the same.
+The main() process, after creating and resuming its four children, also calls
+stackdepth(), prints the returned value, and sleeps for 10 seconds.
+
+Based on the values printed by the five processes, use the addresses to draw
+the stack layout of all five processes and their internal details (i.e., stack
+frame boundaries within each process's run-time stack). Use the segment
+boundaries from Problem 3.2 to generate a full picture of the segment and
+run-time stack layout of the five concurrent processes in XINU. You can use
+any number of drawing software but make sure to export the drawing as a pdf
+file Lab1ProcessLayout.pdf that is placed in system/.
+
+Bonus Problem [30 pts]
+
+Port the stackdepth() to Linux running on the frontend machines so that it
+inspects the run-time stack of processes that call stackdepth(). Determine
+which parts of stackdepth() written for XINU break under Linux and find
+solutions suited for Linux. Write a main() program that performs the same
+testing as you did in Problem 3.3 but now under Linux on a frontend machine in
+the XINU Lab. Put the Linux compatible version in a separate file
+stackdepth_linux.c under system/.
+
+Turn-in Instructions
+
+Electronic turn-in instructions:
+
+        i) Go to the xinu-fall2015/compile directory and do "make clean".
+
+		        ii) Go to the directory of which your xinu-fall2015 directory
+				is a subdirectory. (NOTE: please do not rename xinu-fall2015,
+				or any of its subdirectories.)
+
+				                e.g., if /homes/joe/xinu-fall2015 is your
+								directory structure, go to /homes/joe
+
+								        iii) Type the following command
+
+										                turnin -c cs354 -p
+														lab1 xinu-fall2015
+
+														You can check/list the
+														submitted files using 
+
+														turnin -c cs354 -p
+														lab1 -v
+
+														Important: Please
+														provide comments
+														inside your code so
+														that its function and
+														flow can be conveyed
+														to the reader. Turn
+														off all debugging
+														output before you
+														submit your code. 
+														Back to the CS 354 web
+														page
